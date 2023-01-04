@@ -9,7 +9,6 @@
 # each island must be reachable from any other island
 
 from ortools.sat.python import cp_model
-
 import parse_has
 import sys
 
@@ -26,8 +25,8 @@ def print_solution(h_grid, solver, x_vars):
                   for j in range(2*int(h_grid.height))]
 
     # add islands
-    for (i, j), d in zip(h_grid.island_coordinates, h_grid.digits):
-        replace_character(empty_grid, 2*i, 3*j+1, str(d))
+    for (i, j), d in zip(h_grid.island_coordinates, h_grid.digits.values()):
+        replace_character(empty_grid, 2*i, 3*j+1, str(solver.Value(d)))
 
     sol = ['%s' % line for line in empty_grid]
 
@@ -185,6 +184,17 @@ def add_subtour_elimination(model, subtour_islands, y_vars):
             exiting_bridges.append(y)
     model.Add(sum(exiting_bridges) >= 1)
 
+class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter) :
+    def __init__(self, h_grid, solver, x_vars):
+        self.h_grid = h_grid
+        self.solver = solver
+        self.x_vars = x_vars
+        super().__init__()
+
+    def OnSolutionCallback(self):
+        # print_solution(self.h_grid, self.solver, self.x_vars)
+        print("found solution")
+        return super().OnSolutionCallback()
 
 def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
     """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)
@@ -194,7 +204,8 @@ def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
     while True:
         # try without remaking a solver
         solver = cp_model.CpSolver()
-        status = solver.Solve(model)
+        solution_printer = HashiSolutionPrinter(h_grid, solver, x_vars)
+        status = solver.Solve(model, solution_printer)
 
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             print('No solution found.')
@@ -212,11 +223,15 @@ def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
 
 def main():
 
-    h_grid = parse_has.read_has_file(sys.argv[1])
+    grid_df, width, height, n_islands = parse_has.read_grid_as_df(sys.argv[1])
 
     model = cp_model.CpModel()
     if not model:
         return
+
+    h_grid = parse_has.ProbabilisticHashiGrid(width, height, n_islands)
+    h_grid.fill_grid(grid_df, model)
+    h_grid.set_digits()
 
     # declaring the variables
     x_vars = {}
@@ -250,7 +265,16 @@ def main():
     # Weak connectivity constraint
     model.Add(sum(y_vars.values()) >= h_grid.n_islands-1)
 
-    solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
+    solved = False
+    while not solved :
+        # define the value of digits as the most likely combination
+
+        # solve with branch and cut
+        solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
+
+        solved =True
+        # check that there is only one solution
+        # if not, add nogood and retry
 
 
 if __name__ == '__main__':
