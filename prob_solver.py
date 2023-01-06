@@ -25,7 +25,7 @@ def print_solution(h_grid, solver, x_vars):
                   for j in range(2*int(h_grid.height))]
 
     # add islands
-    for (i, j), d in zip(h_grid.island_coordinates, h_grid.digits.values()):
+    for (i, j), d in zip(h_grid.island_coordinates, h_grid.digits):
         replace_character(empty_grid, 2*i, 3*j+1, str(solver.Value(d)))
 
     sol = ['%s' % line for line in empty_grid]
@@ -231,7 +231,7 @@ def main():
 
     h_grid = parse_has.ProbabilisticHashiGrid(width, height, n_islands)
     h_grid.fill_grid(grid_df, model)
-    h_grid.set_digits()
+    # h_grid.set_digits()
 
     # declaring the variables
     x_vars = {}
@@ -265,16 +265,29 @@ def main():
     # Weak connectivity constraint
     model.Add(sum(y_vars.values()) >= h_grid.n_islands-1)
 
-    solved = False
-    while not solved :
+    digits_probs = {}
+    for i in range(n_islands) :
+        digits_probs[i]=model.NewIntVar(0,1000,f'dp_{i}')
+        model.AddElement(h_grid.digits[i],h_grid.probs[i],digits_probs[i])
+
+    model.Maximize(
+        sum(digits_probs.values())
+    )
+
+    # solved = False
+    # while not solved :
         # define the value of digits as the most likely combination
 
         # solve with branch and cut
-        solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
+    solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
 
-        solved =True
+    print("Objective value : ",solver.ObjectiveValue())
+    print("Digits probabilites : ")
+    for i in range(n_islands) :
+        print(solver.Value(digits_probs[i]))
         # check that there is only one solution
         # if not, add nogood and retry
+        # solved =True
 
 
 if __name__ == '__main__':

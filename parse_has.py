@@ -48,14 +48,15 @@ class ProbabilisticHashiGrid :
         self.island_coordinates = []
 
         self.probs = {}
-        self.digits = {}
+        self.digits = []
         self.potential_digit_combinations = []
 
     def fill_grid(self, grid_df, model) :
         for l in range(self.n_islands) :
             island_coords = (grid_df.loc[l+1,'row'],grid_df.loc[l+1,'col'])
             self.island_coordinates.append(island_coords)
-            self.probs[l] = [i for i in grid_df.loc[l+1,'1_prob':'8_prob']]
+            self.probs[l] = [0]+[int(1000*i) for i in grid_df.loc[l+1,'1_prob':'8_prob']]
+            self.digits.append(model.NewIntVar(1,8,f'd_{l}'))
 
     def set_digits(self) :
         for l in range(self.n_islands) :
