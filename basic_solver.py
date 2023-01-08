@@ -203,7 +203,7 @@ def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
         if not subtour:
             print_solution(h_grid, solver, x_vars)
             print(
-                f'Successfully solved the grid in {solver.UserTime()} seconds')
+                f'Successfully solved the grid in {round(solver.UserTime(),3)} seconds')
             return solver, status
 
         add_subtour_elimination(model, subtour, y_vars)
