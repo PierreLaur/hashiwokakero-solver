@@ -1,4 +1,4 @@
-# Hashiwokakero Solver
+## Hashiwokakero Solver
 
 A Constraint Programming solver for the [Hashiwokakero](https://en.wikipedia.org/wiki/Hashiwokakero) logic puzzle, made with Google OR-Tools.
 
