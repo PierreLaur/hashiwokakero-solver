@@ -40,27 +40,23 @@ def read_has_file(file) :
     return h_grid
 
 class ProbabilisticHashiGrid :
-    def __init__(self, width, height, n_islands) -> None:
+    def __init__(self, width, height, n_islands, precision) -> None:
         self.width = width
         self.height = height
         self.n_islands = n_islands
+        self.precision = precision
 
         self.island_coordinates = []
 
         self.probs = {}
         self.digits = []
-        self.potential_digit_combinations = []
 
     def fill_grid(self, grid_df, model) :
         for l in range(self.n_islands) :
             island_coords = (grid_df.loc[l+1,'row'],grid_df.loc[l+1,'col'])
             self.island_coordinates.append(island_coords)
-            self.probs[l] = [0]+[int(1000*i) for i in grid_df.loc[l+1,'1_prob':'8_prob']]
+            self.probs[l] = [0]+[round((10**self.precision)*i) for i in grid_df.loc[l+1,'1_prob':'8_prob']]
             self.digits.append(model.NewIntVar(1,8,f'd_{l}'))
-
-    def set_digits(self) :
-        for l in range(self.n_islands) :
-            self.digits[l] = np.argmax(self.probs[l])+1
 
     # def eliminate_combination
 

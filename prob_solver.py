@@ -11,7 +11,9 @@
 from ortools.sat.python import cp_model
 import parse_has
 import sys
+import numpy as np
 
+PRECISION_N_DIGITS = 5
 
 def print_solution(h_grid, solver, x_vars):
     """
@@ -184,7 +186,8 @@ def add_subtour_elimination(model, subtour_islands, y_vars):
             exiting_bridges.append(y)
     model.Add(sum(exiting_bridges) >= 1)
 
-class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter) :
+
+class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter):
     def __init__(self, h_grid, solver, x_vars):
         self.h_grid = h_grid
         self.solver = solver
@@ -193,8 +196,9 @@ class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter) :
 
     def OnSolutionCallback(self):
         # print_solution(self.h_grid, self.solver, self.x_vars)
-        print("found solution")
-        return super().OnSolutionCallback()
+        # print("found solution")
+        return
+
 
 def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
     """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)
@@ -204,24 +208,25 @@ def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
     while True:
         # try without remaking a solver
         solver = cp_model.CpSolver()
-        solution_printer = HashiSolutionPrinter(h_grid, solver, x_vars)
-        status = solver.Solve(model, solution_printer)
+        status = solver.Solve(model)
 
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            print('No solution found.')
             return solver, status
 
         subtour = find_subtour(h_grid, solver, y_vars)
-        if not subtour:
-            print_solution(h_grid, solver, x_vars)
-            print(
-                f'Successfully solved the grid in {solver.UserTime()} seconds')
+        if subtour:
+            print("Eliminating subtour")
+            add_subtour_elimination(model, subtour, y_vars)
+            continue
+        else:
             return solver, status
-
-        add_subtour_elimination(model, subtour, y_vars)
 
 
 def main():
+
+    if PRECISION_N_DIGITS<=0 or PRECISION_N_DIGITS>17:
+        print("Precision (number of digits) must be >0 and <=17")
+        return
 
     grid_df, width, height, n_islands = parse_has.read_grid_as_df(sys.argv[1])
 
@@ -229,9 +234,8 @@ def main():
     if not model:
         return
 
-    h_grid = parse_has.ProbabilisticHashiGrid(width, height, n_islands)
+    h_grid = parse_has.ProbabilisticHashiGrid(width, height, n_islands, PRECISION_N_DIGITS)
     h_grid.fill_grid(grid_df, model)
-    # h_grid.set_digits()
 
     # declaring the variables
     x_vars = {}
@@ -266,28 +270,61 @@ def main():
     model.Add(sum(y_vars.values()) >= h_grid.n_islands-1)
 
     digits_probs = {}
-    for i in range(n_islands) :
-        digits_probs[i]=model.NewIntVar(0,1000,f'dp_{i}')
-        model.AddElement(h_grid.digits[i],h_grid.probs[i],digits_probs[i])
+    probs_upper_bound = 0
+    for i in range(n_islands):
+        digits_probs[i] = model.NewIntVar(0, 10**PRECISION_N_DIGITS, f'dp_{i}')
+        model.AddElement(h_grid.digits[i], h_grid.probs[i], digits_probs[i])
+        probs_upper_bound += max(h_grid.probs[i])
 
-    model.Maximize(
-        sum(digits_probs.values())
-    )
+    solved = False
+    while not solved:
 
-    # solved = False
-    # while not solved :
-        # define the value of digits as the most likely combination
+        # solve the model with digits probs maximization to find the digits values
+        model.Maximize(sum(digits_probs.values()))
 
-        # solve with branch and cut
-    solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
+        # solve with branch and cut to eliminate subtours
+        solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
 
-    print("Objective value : ",solver.ObjectiveValue())
-    print("Digits probabilites : ")
-    for i in range(n_islands) :
-        print(solver.Value(digits_probs[i]))
-        # check that there is only one solution
-        # if not, add nogood and retry
-        # solved =True
+        # If no solution, it was the wrong digit assignment
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            model.AddForbiddenAssignments(
+                h_grid.digits, [solver.Value(d) for d in h_grid.digits])
+            continue
+
+        else:
+            confidence_level = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
+            print(
+                f"Found potential solution with confidence level = {confidence_level}")
+
+            # Check if there is multiple solutions with the previously found digit assignment
+            aux_model = cp_model.CpModel()
+            aux_model.CopyFrom(model)
+            aux_model.AddAllowedAssignments(
+                h_grid.digits, [tuple([solver.Value(d) for d in h_grid.digits])])
+            aux_model.ClearObjective()
+
+            solver = cp_model.CpSolver()
+            solver.parameters.enumerate_all_solutions = True
+            solution_printer = HashiSolutionPrinter(h_grid, solver, x_vars)
+            status = solver.Solve(aux_model, solution_printer)
+
+            if solution_printer.solution_count() > 1:
+                print("Two solutions found, retrying")
+                model.AddForbiddenAssignments(
+                    h_grid.digits, [solver.Value(d) for d in h_grid.digits])
+                model.ClearHints()
+            else:
+                print("Only one solution found")
+                print_solution(h_grid, solver, x_vars)
+                print(f"Confidence level : {confidence_level}%")
+                print(
+                    f'Successfully solved the grid in {solver.UserTime()} seconds')
+                solved = True
+
+    # print("Objective value : ",solver.ObjectiveValue())
+    # print("Digits probabilites : ")
+    # for i in range(n_islands) :
+    #     print(solver.Value(digits_probs[i]))
 
 
 if __name__ == '__main__':
