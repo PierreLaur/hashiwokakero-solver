@@ -77,7 +77,7 @@ def print_solution(h_grid, solver, x_vars, write_solutions=True):
                         replace_character(
                             sol, 2*coords[0], 1+3*coords[1]+1, "-" if n_bridges == 1 else "=")
 
-    if write_solutions :
+    if write_solutions:
         # print to a file
         if not os.path.exists('solved_grids'):
             os.mkdir('solved_grids')
@@ -211,7 +211,7 @@ class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter):
         return
 
 
-def branch_and_cut(h_grid, relaxed_model, y_vars):
+def branch_and_cut(h_grid, relaxed_model, y_vars, log=False):
     """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)
     """
 
@@ -222,18 +222,23 @@ def branch_and_cut(h_grid, relaxed_model, y_vars):
         status = solver.Solve(model)
 
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            if log:
+                print("No solution found")
             return solver, status
 
+        if log:
+            print("Potential solution, checking subtours")
         subtour = find_subtour(h_grid, solver, y_vars)
         if subtour:
-            print("Eliminating subtour")
+            if log:
+                print("    Eliminating subtour")
             add_subtour_elimination(model, subtour, y_vars)
             continue
         else:
             return solver, status
 
 
-def solve_grid(json_grid, write_solutions=True):
+def solve_grid(json_grid, write_solutions=True, log=False):
 
     start_time = time.process_time()
 
@@ -297,7 +302,8 @@ def solve_grid(json_grid, write_solutions=True):
         model.Maximize(sum(digits_probs.values()))
 
         # solve with branch and cut to eliminate subtours
-        solver, status = branch_and_cut(h_grid, model, y_vars)
+
+        solver, status = branch_and_cut(h_grid, model, y_vars, log=log)
 
         # If no solution, disallow this digit assignment
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
@@ -306,6 +312,8 @@ def solve_grid(json_grid, write_solutions=True):
             continue
 
         else:
+            if log:
+                print("    No subtours, checking if solution is unique")
             confidence = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
 
             # Check if there is multiple solutions with the previously found digit assignment
@@ -323,9 +331,14 @@ def solve_grid(json_grid, write_solutions=True):
 
             # If multiple solutions exist, the digits were not correct, try again
             if solution_printer.solution_count() > 1:
+                if log:
+                    print("        Solution is not unique, retrying")
+
                 model.AddForbiddenAssignments(
                     h_grid.digits, [solver.Value(d) for d in h_grid.digits])
             else:
+                if log:
+                    print("        Solution is unique !")
                 empty_grid, solved_grid = print_solution(
                     h_grid, solver, x_vars, write_solutions)
 
@@ -333,13 +346,13 @@ def solve_grid(json_grid, write_solutions=True):
                 return "Empty grid : \n" + empty_grid +\
                     "Solution : \n" + solved_grid +\
                     f"Confidence : {confidence}%\n" +\
-                    f'Successfully solved the grid in {round(time.process_time()-start_time,3)} seconds'
+                    f'Successfully solved the grid in {round(time.process_time()-start_time,3)} milliseconds'
 
 
 def main():
     with open(sys.argv[1], 'r') as f:
         grid_json = json.load(f)
-    result = solve_grid(grid_json)
+    result = solve_grid(grid_json, log=True)
     print(result)
 
 

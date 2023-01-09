@@ -6,7 +6,7 @@ app = Flask(__name__)
 @app.route('/solve', methods=["POST"])
 def test():
     grid = request.get_json(silent=True)
-    return solve_grid(grid,write_solutions=False)
+    return solve_grid(grid)
 
 
 if __name__ == '__main__':
