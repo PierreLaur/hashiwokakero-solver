@@ -13,8 +13,10 @@ import time
 import parse_has
 import sys
 import os
+import json
 
 PRECISION_N_DIGITS = 5
+
 
 def print_solution(h_grid, solver, x_vars):
     """
@@ -24,7 +26,7 @@ def print_solution(h_grid, solver, x_vars):
         sol[i] = sol[i][:j] + char + sol[i][j+1:]
 
     # empty grid with spaces
-    empty_grid = ["   " * int(h_grid.width)
+    empty_grid = ["   " * int(h_grid.width)+"\n"
                   for j in range(2*int(h_grid.height))]
 
     # add islands
@@ -76,17 +78,15 @@ def print_solution(h_grid, solver, x_vars):
                             sol, 2*coords[0], 1+3*coords[1]+1, "-" if n_bridges == 1 else "=")
 
     # print to a file
-    if not os.path.exists('solved_grids') :
+    if not os.path.exists('solved_grids'):
         os.mkdir('solved_grids')
     i = 0
     while os.path.exists("solved_grids/probabilistic_%s" % i):
         i += 1
     output_file = open("solved_grids/probabilistic_%s" % i, "w")
+    output_file.writelines(sol)
 
-    print('Empty grid :' + '   '*int(h_grid.width)+'Solved grid : ')
-    for empty_grid_line, sol_line in zip(empty_grid[:len(sol)-1], sol[:len(sol)-1]):
-        print(empty_grid_line, '  *  ', sol_line)
-        output_file.write(sol_line+"\n")
+    return ''.join(empty_grid), ''.join(sol)
 
 
 def adjacent_islands(h_grid, island_index):
@@ -199,6 +199,7 @@ def add_subtour_elimination(model, subtour_islands, y_vars):
 
 class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter):
     """ may be used to print intermediate solutions """
+
     def __init__(self, h_grid, solver, x_vars):
         self.h_grid = h_grid
         self.solver = solver
@@ -231,22 +232,23 @@ def branch_and_cut(h_grid, relaxed_model, y_vars):
             return solver, status
 
 
-def main():
+def solve_grid(json_grid):
 
     start_time = time.process_time()
 
-    if PRECISION_N_DIGITS<=0 or PRECISION_N_DIGITS>17:
+    if PRECISION_N_DIGITS <= 0 or PRECISION_N_DIGITS > 17:
         print("Precision (number of digits) must be >0 and <=17")
         return
 
-    grid_df, width, height, n_islands = parse_has.read_grid_as_df(sys.argv[1])
+    islands, width, height, n_islands = parse_has.read_json_grid(json_grid)
 
     model = cp_model.CpModel()
     if not model:
         return
 
-    h_grid = parse_has.ProbabilisticHashiGrid(width, height, n_islands, PRECISION_N_DIGITS)
-    h_grid.fill_grid(grid_df, model)
+    h_grid = parse_has.ProbabilisticHashiGrid(
+        width, height, n_islands, PRECISION_N_DIGITS)
+    h_grid.fill_grid(islands, model)
 
     # declaring the variables
     x_vars = {}
@@ -304,8 +306,6 @@ def main():
 
         else:
             confidence = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
-            print(
-                f"Found potential solution with a confidence of {confidence}%")
 
             # Check if there is multiple solutions with the previously found digit assignment
             aux_model = cp_model.CpModel()
@@ -322,16 +322,24 @@ def main():
 
             # If multiple solutions exist, the digits were not correct, try again
             if solution_printer.solution_count() > 1:
-                print("Multiple solutions found, retrying")
                 model.AddForbiddenAssignments(
                     h_grid.digits, [solver.Value(d) for d in h_grid.digits])
             else:
-                print("Only one solution found")
-                print_solution(h_grid, solver, x_vars)
-                print(f"Confidence : {confidence}%")
-                print(
-                    f'Successfully solved the grid in {round(time.process_time()-start_time,3)} seconds')
+                empty_grid, solved_grid = print_solution(
+                    h_grid, solver, x_vars)
+
                 solved = True
+                return "Empty grid : \n" + empty_grid +\
+                    "Solution : \n" + solved_grid +\
+                    f"Confidence : {confidence}%\n" +\
+                    f'Successfully solved the grid in {round(time.process_time()-start_time,3)} seconds'
+
+
+def main():
+    with open(sys.argv[1], 'r') as f:
+        grid_json = json.load(f)
+    result = solve_grid(grid_json)
+    print(result)
 
 
 if __name__ == '__main__':

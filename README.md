@@ -16,6 +16,6 @@ It includes two versions :
 
 - Install requirements `pip install -r requirements.txt`
 - Run `python basic_solver.py puzzles/basic/100/Hs_16_100_25_00_001.has` to try the basic solver \
- or `python probabilistic_solver.py puzzles/probabilistic/toy_grid_probs.csv` to try the probabilistic one
+ or `python probabilistic_solver.py puzzles/probabilistic/toy_grid_probs.json` to try the probabilistic one
 
 Puzzles in `puzzles/basic/[1-4]00` are from [Coelho et al. 2019](https://arxiv.org/abs/1905.00973)
