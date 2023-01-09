@@ -12,6 +12,7 @@ from ortools.sat.python import cp_model
 import time
 import parse_has
 import sys
+import os
 
 PRECISION_N_DIGITS = 5
 
@@ -74,9 +75,18 @@ def print_solution(h_grid, solver, x_vars):
                         replace_character(
                             sol, 2*coords[0], 1+3*coords[1]+1, "-" if n_bridges == 1 else "=")
 
+    # print to a file
+    if not os.path.exists('solved_grids') :
+        os.mkdir('solved_grids')
+    i = 0
+    while os.path.exists("solved_grids/probabilistic_%s" % i):
+        i += 1
+    output_file = open("solved_grids/probabilistic_%s" % i, "w")
+
     print('Empty grid :' + '   '*int(h_grid.width)+'Solved grid : ')
     for empty_grid_line, sol_line in zip(empty_grid[:len(sol)-1], sol[:len(sol)-1]):
         print(empty_grid_line, '  *  ', sol_line)
+        output_file.write(sol_line+"\n")
 
 
 def adjacent_islands(h_grid, island_index):
@@ -293,9 +303,9 @@ def main():
             continue
 
         else:
-            confidence_level = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
+            confidence = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
             print(
-                f"Found potential solution with a confidence level of {confidence_level}%")
+                f"Found potential solution with a confidence of {confidence}%")
 
             # Check if there is multiple solutions with the previously found digit assignment
             aux_model = cp_model.CpModel()
@@ -318,7 +328,7 @@ def main():
             else:
                 print("Only one solution found")
                 print_solution(h_grid, solver, x_vars)
-                print(f"Confidence level : {confidence_level}%")
+                print(f"Confidence : {confidence}%")
                 print(
                     f'Successfully solved the grid in {round(time.process_time()-start_time,3)} seconds')
                 solved = True
