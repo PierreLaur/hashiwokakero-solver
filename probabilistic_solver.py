@@ -348,8 +348,7 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
     empty_grid, solved_grid = print_solution(
         h_grid, solver, x_vars, write_solutions)
 
-    return "Empty grid : \n" + empty_grid +\
-        "Solution : \n" + solved_grid +\
+    return "Solution : \n" + solved_grid +\
         f"Confidence : {confidence}%\n" +\
         f'Successfully solved the grid in {round(time.time()-start_time,3)} seconds'
 

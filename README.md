@@ -12,7 +12,7 @@ It includes two versions :
   | 1      | 0          | 2          | 2%  | 1%  | 87% | 0%  | 0%  | 0%  | 0%  | 10% |
   | ...    |            |            |     |     |     |     |     |     |     |     |
 
-  It finds the grid that has a solution with the highest probabilities. 
+  It finds the grid that has a solution with the highest probabilities.
   With the --solution-is-unique argument, if that grid gives multiple solutions, it solves the next most likely grid, and repeats until it finds one with a unique solution.
 
 ### Testing
