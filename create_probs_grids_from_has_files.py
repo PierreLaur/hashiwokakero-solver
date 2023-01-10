@@ -17,14 +17,15 @@ def generate_probs_grid(has_grid):
             for col, d in enumerate(digits):
                 if d != '0':
                     digits_probs = np.random.randint(0, 10, 8)
-                    digits_probs[int(d)-1] += 10000
+                    digits_probs[int(d)-1] += 5
                     digits_probs = list(
                         digits_probs / np.linalg.norm(digits_probs))
                     json_grid['islands'].append(
                         {'row': row, 'col': col, 'digits_probabilities': digits_probs})
     return json_grid
 
-def copy_all_has_grids() :
+
+def copy_all_has_grids():
     """Creates json grids from the big .has dataset
     These grids are incorrect, they allow multiple solutions (our probabilistic solver will not work)
     """
@@ -42,7 +43,9 @@ def copy_all_has_grids() :
 
 
 def main():
-    generate_probs_grid(sys.argv[1])
+    copy_all_has_grids()
+    # generate_probs_grid(sys.argv[1])
+
 
 if __name__ == '__main__':
     main()

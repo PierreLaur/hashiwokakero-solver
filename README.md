@@ -12,12 +12,14 @@ It includes two versions :
   | 1      | 0          | 2          | 2%  | 1%  | 87% | 0%  | 0%  | 0%  | 0%  | 10% |
   | ...    |            |            |     |     |     |     |     |     |     |     |
 
-  It tries to solve the grid that maximizes these probabilities. If that grid gives no solution or multiple solutions, it solves the next most likely grid, and repeats until it finds one with a unique solution.
+  It finds the grid that has a solution with the highest probabilities. 
+  With the --solution-is-unique argument, if that grid gives multiple solutions, it solves the next most likely grid, and repeats until it finds one with a unique solution.
 
 ### Testing
 
 - Install requirements `pip install -r requirements.txt`
 - Run `python basic_solver.py puzzles/basic/100/Hs_16_100_25_00_001.has` to try the basic solver \
-  or `python probabilistic_solver.py puzzles/probabilistic/toy_grid_probs.json` to try the probabilistic one
+  or `python probabilistic_solver.py puzzles/probabilistic/toy_grid_probs.json` to try the probabilistic one. Add --solution-is-unique to specify that the grid has a unique solution.
 
-Puzzles in `puzzles/basic/[1-4]00` are from [Coelho et al. 2019](https://arxiv.org/abs/1905.00973). They allow multiple solutions (our solver assumes only one exists).
+Puzzles in `puzzles/basic/[1-4]00` are from [Coelho et al. 2019](https://arxiv.org/abs/1905.00973). They allow multiple solutions.  
+Run `python create_probs_grids_from_has_files.py` to create probabilistic grids from the .has files in puzzles/basic/

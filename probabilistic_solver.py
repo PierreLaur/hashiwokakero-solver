@@ -1,21 +1,13 @@
-# Only one solution
-# in sudoku : solve once, find another solution, if there is 2 then nogood() and repeat
-
-# the bridges must begin and end on distinct islands
-# they must not cross bridges or islands
-# they may only run horizontally or vertically
-# at most 2 bridges may connect any island pair
-# the number of bridges connected to each island must be equal to the number inside the circle
-# each island must be reachable from any other island
-
 from ortools.sat.python import cp_model
 import time
 import parse_has
 import sys
 import os
 import json
+import argparse
 
 PRECISION_N_DIGITS = 5
+
 
 def print_solution(h_grid, solver, x_vars, write_solutions=True):
     """
@@ -208,10 +200,11 @@ class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter):
 
     def OnSolutionCallback(self):
         print_solution(self.h_grid, self, self.x_variables)
-        if self.solution_count()>0 :
+        if self.solution_count() > 0:
             self.StopSearch()
         return super().OnSolutionCallback()
         # return
+
 
 def branch_and_cut(h_grid, relaxed_model, y_vars, log=False):
     """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)
@@ -240,9 +233,9 @@ def branch_and_cut(h_grid, relaxed_model, y_vars, log=False):
             return solver, status
 
 
-def solve_grid(json_grid, write_solutions=True, log=False):
+def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=False):
 
-    start_time = time.process_time()
+    start_time = time.time()
 
     if PRECISION_N_DIGITS <= 0 or PRECISION_N_DIGITS > 17:
         print("Precision (number of digits) must be >0 and <=17")
@@ -276,7 +269,6 @@ def solve_grid(json_grid, write_solutions=True, log=False):
 
         model.Add(sum(adjacent_xvars) == h_grid.digits[i])
 
-
     # If there is a bridge between i and j, x must be >0 and <=2
     # If there is no bridge between i and j, x must be =0
     for (x, y) in zip(x_vars.values(), y_vars.values()):
@@ -300,15 +292,21 @@ def solve_grid(json_grid, write_solutions=True, log=False):
         model.AddElement(h_grid.digits[i], h_grid.probs[i], digits_probs[i])
         probs_upper_bound += max(h_grid.probs[i])
 
+    # Maximize the probabilities of the digits
+    model.Maximize(sum(digits_probs.values()))
+
     solved = False
     while not solved:
-
-        # Maximize the probabilities of the digits
-        model.Maximize(sum(digits_probs.values()))
 
         # solve with branch and cut to eliminate subtours
 
         solver, status = branch_and_cut(h_grid, model, y_vars, log=log)
+        confidence = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
+
+        # If the solution isn't unique, we found a solution
+        #  (there is at least one solution with this digit combination)
+        if not solution_is_unique:
+            break
 
         # If no solution, disallow this digit assignment
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
@@ -317,7 +315,6 @@ def solve_grid(json_grid, write_solutions=True, log=False):
             continue
 
         else:
-            confidence = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
             if log:
                 print("    No subtours, checking if solution is unique")
                 print(f"    Confidence : {confidence}")
@@ -346,20 +343,30 @@ def solve_grid(json_grid, write_solutions=True, log=False):
             else:
                 if log:
                     print("        Solution is unique !")
-                empty_grid, solved_grid = print_solution(
-                    h_grid, solver, x_vars, write_solutions)
-
                 solved = True
-                return "Empty grid : \n" + empty_grid +\
-                    "Solution : \n" + solved_grid +\
-                    f"Confidence : {confidence}%\n" +\
-                    f'Successfully solved the grid in {round(time.process_time()-start_time,3)} milliseconds'
+
+    empty_grid, solved_grid = print_solution(
+        h_grid, solver, x_vars, write_solutions)
+
+    return "Empty grid : \n" + empty_grid +\
+        "Solution : \n" + solved_grid +\
+        f"Confidence : {confidence}%\n" +\
+        f'Successfully solved the grid in {round(time.time()-start_time,3)} seconds'
 
 
 def main():
-    with open(sys.argv[1], 'r') as f:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("grid")
+    parser.add_argument("--solution_is_unique", action="store_true")
+
+    args = parser.parse_args()
+    solution_is_unique = True if args.solution_is_unique else False
+
+    with open(args.grid, 'r') as f:
         grid_json = json.load(f)
-    result = solve_grid(grid_json, log=True)
+
+    result = solve_grid(grid_json, log=True,
+                        solution_is_unique=solution_is_unique)
     print(result)
 
 
