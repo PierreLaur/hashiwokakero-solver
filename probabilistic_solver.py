@@ -301,7 +301,9 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
         # solve with branch and cut to eliminate subtours
 
         solver, status = branch_and_cut(h_grid, model, y_vars, log=log)
-        confidence = solver.ObjectiveValue() / 10**PRECISION_N_DIGITS
+        confidence = 1
+        for dp in digits_probs.values() :
+            confidence *= solver.Value(dp) / 10**PRECISION_N_DIGITS
 
         # If the solution isn't unique, we found a solution
         #  (there is at least one solution with this digit combination)
@@ -349,7 +351,7 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
         h_grid, solver, x_vars, write_solutions)
 
     return "Solution : \n" + solved_grid +\
-        f"Confidence : {confidence}%\n" +\
+        f"Confidence : {confidence*100}%\n" +\
         f'Successfully solved the grid in {round(time.time()-start_time,3)} seconds'
 
 
