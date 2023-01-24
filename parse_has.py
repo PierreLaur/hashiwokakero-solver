@@ -1,9 +1,12 @@
+"""Data structures and functions for parsing Hashi grids"""
 import sys
 import json
-
+from pathlib import Path
 
 class HashiGrid:
-    def __init__(self, width, height, n_islands) -> None:
+    def __init__(self, name, width, height, n_islands) -> None:
+        self.name = name
+        
         self.width = width
         self.height = height
 
@@ -16,25 +19,22 @@ class HashiGrid:
         for i, line in enumerate(grid):
             for j, square in enumerate(line):
                 if square != 0:
-                    self.island_coordinates.append(
-                        (i, j)
-                    )
+                    self.island_coordinates.append((i, j))
                     self.digits.append(square)
 
     def print_grid(self):
         for coords, d in zip(self.island_coordinates, self.digits):
-            print(f'Island {coords}    with n_bridges = {d}')
+            print(f"Island {coords}    with n_bridges = {d}")
 
 
 def read_has_file(file):
-    file = sys.argv[1]
     grid = []
     with open(file) as f:
         width, height, n_islands = f.readline().split()
         for line in f:
             grid.append(list(map(lambda x: int(x), line.strip().split())))
 
-    h_grid = HashiGrid(width, height, int(n_islands))
+    h_grid = HashiGrid(Path(file).stem, width, height, int(n_islands))
     h_grid.fill_grid(grid)
 
     return h_grid
@@ -54,31 +54,33 @@ class ProbabilisticHashiGrid:
 
     def fill_grid(self, islands, model):
         for l in range(self.n_islands):
-            island_coords = (islands[l]['row'], islands[l]['col'])
+            island_coords = (islands[l]["row"], islands[l]["col"])
             self.island_coordinates.append(island_coords)
-            self.probs[l] = [0]+[round((10**self.precision)*i)
-                                 for i in islands[l]['digits_probabilities']]
-            self.digits.append(model.NewIntVar(1, 8, f'd_{l}'))
+            self.probs[l] = [0] + [
+                round((10**self.precision) * i)
+                for i in islands[l]["digits_probabilities"]
+            ]
+            self.digits.append(model.NewIntVar(1, 8, f"d_{l}"))
 
     # def eliminate_combination
 
     def print_grid(self):
         for coords, d in zip(self.island_coordinates, self.digits):
-            print(f'Island {coords}    with n_bridges = {d}')
+            print(f"Island {coords}    with n_bridges = {d}")
 
 
 def read_json_grid(grid_json):
 
-    width = grid_json['width']
-    height = grid_json['height']
+    width = grid_json["width"]
+    height = grid_json["height"]
 
-    islands = grid_json['islands']
+    islands = grid_json["islands"]
     n_islands = len(islands)
     return islands, width, height, n_islands
 
 
 def main():
-    with open(sys.argv[1], 'r') as f:
+    with open(sys.argv[1], "r") as f:
         grid_json = json.load(f)
     islands, width, height, n_islands = read_json_grid(grid_json)
     print(n_islands, width, height)

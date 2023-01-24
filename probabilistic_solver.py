@@ -1,7 +1,6 @@
 from ortools.sat.python import cp_model
 import time
 import parse_has
-import sys
 import os
 import json
 import argparse
@@ -9,22 +8,24 @@ import argparse
 PRECISION_N_DIGITS = 5
 
 
-def print_solution(h_grid, solver, x_vars, write_solutions=True):
+def print_solution(h_grid, solver, x_vars, write_solutions=False):
     """
     Inline helper to add an island or bridge in the solution
     """
+
     def replace_character(sol, i, j, char):
-        sol[i] = sol[i][:j] + char + sol[i][j+1:]
+        sol[i] = sol[i][:j] + char + sol[i][j + 1 :]
 
     # empty grid with spaces
-    empty_grid = ["   " * int(h_grid.width)+"\n"
-                  for j in range(2*int(h_grid.height))]
+    empty_grid = [
+        "   " * int(h_grid.width) + "\n" for j in range(2 * int(h_grid.height))
+    ]
 
     # add islands
     for (i, j), d in zip(h_grid.island_coordinates, h_grid.digits):
-        replace_character(empty_grid, 2*i, 3*j+1, str(solver.Value(d)))
+        replace_character(empty_grid, 2 * i, 3 * j + 1, str(solver.Value(d)))
 
-    sol = ['%s' % line for line in empty_grid]
+    sol = ["%s" % line for line in empty_grid]
 
     # add bridges
     for bridge in x_vars.keys():
@@ -32,58 +33,100 @@ def print_solution(h_grid, solver, x_vars, write_solutions=True):
 
             n_bridges = solver.Value(x_vars[bridge])
             coords_between, is_horizontal = coordinates_between(
-                h_grid, bridge[0], bridge[1])
+                h_grid, bridge[0], bridge[1]
+            )
 
             if not is_horizontal:
-                replace_character(sol, 2*h_grid.island_coordinates[bridge[0]][0]+1,
-                                  1 + 3 * h_grid.island_coordinates[bridge[0]][1], "|" if n_bridges == 1 else "‖")
-                replace_character(sol, 2*h_grid.island_coordinates[bridge[1]][0]-1,
-                                  1 + 3 * h_grid.island_coordinates[bridge[1]][1], "|" if n_bridges == 1 else "‖")
+                replace_character(
+                    sol,
+                    2 * h_grid.island_coordinates[bridge[0]][0] + 1,
+                    1 + 3 * h_grid.island_coordinates[bridge[0]][1],
+                    "|" if n_bridges == 1 else "‖",
+                )
+                replace_character(
+                    sol,
+                    2 * h_grid.island_coordinates[bridge[1]][0] - 1,
+                    1 + 3 * h_grid.island_coordinates[bridge[1]][1],
+                    "|" if n_bridges == 1 else "‖",
+                )
             else:
                 replace_character(
-                    sol, 2*h_grid.island_coordinates[bridge[0]][0], 1+3*h_grid.island_coordinates[bridge[0]][1]+1, "-" if n_bridges == 1 else "=")
+                    sol,
+                    2 * h_grid.island_coordinates[bridge[0]][0],
+                    1 + 3 * h_grid.island_coordinates[bridge[0]][1] + 1,
+                    "-" if n_bridges == 1 else "=",
+                )
                 replace_character(
-                    sol, 2*h_grid.island_coordinates[bridge[1]][0], 1+3*h_grid.island_coordinates[bridge[1]][1]-1, "-" if n_bridges == 1 else "=")
+                    sol,
+                    2 * h_grid.island_coordinates[bridge[1]][0],
+                    1 + 3 * h_grid.island_coordinates[bridge[1]][1] - 1,
+                    "-" if n_bridges == 1 else "=",
+                )
 
             for coords in coords_between:
                 if not is_horizontal:
                     replace_character(
-                        sol, 2*coords[0], 1+3*coords[1], "|" if n_bridges == 1 else "‖")
+                        sol,
+                        2 * coords[0],
+                        1 + 3 * coords[1],
+                        "|" if n_bridges == 1 else "‖",
+                    )
                     if coords[0] > 0:
                         replace_character(
-                            sol, 2*coords[0]-1, 1+3*coords[1], "|" if n_bridges == 1 else "‖")
+                            sol,
+                            2 * coords[0] - 1,
+                            1 + 3 * coords[1],
+                            "|" if n_bridges == 1 else "‖",
+                        )
                     if coords[0] < int(h_grid.width):
                         replace_character(
-                            sol, 2*coords[0]+1, 1+3*coords[1], "|" if n_bridges == 1 else "‖")
+                            sol,
+                            2 * coords[0] + 1,
+                            1 + 3 * coords[1],
+                            "|" if n_bridges == 1 else "‖",
+                        )
                 else:
-                    if sol[2*coords[0]][1+3*coords[1]] in list(map(str, list(range(1, 9)))):
-                        print('Erasing island !')
+                    if sol[2 * coords[0]][1 + 3 * coords[1]] in list(
+                        map(str, list(range(1, 9)))
+                    ):
+                        print("Erasing island !")
                         print(bridge, coords)
                     replace_character(
-                        sol, 2*coords[0], 1+3*coords[1], "-" if n_bridges == 1 else "=")
+                        sol,
+                        2 * coords[0],
+                        1 + 3 * coords[1],
+                        "-" if n_bridges == 1 else "=",
+                    )
                     if coords[1] > 0:
                         replace_character(
-                            sol, 2*coords[0], 1+3*coords[1]-1, "-" if n_bridges == 1 else "=")
+                            sol,
+                            2 * coords[0],
+                            1 + 3 * coords[1] - 1,
+                            "-" if n_bridges == 1 else "=",
+                        )
                     if coords[1] < int(h_grid.height):
                         replace_character(
-                            sol, 2*coords[0], 1+3*coords[1]+1, "-" if n_bridges == 1 else "=")
+                            sol,
+                            2 * coords[0],
+                            1 + 3 * coords[1] + 1,
+                            "-" if n_bridges == 1 else "=",
+                        )
 
     if write_solutions:
         # print to a file
-        if not os.path.exists('solved_grids'):
-            os.mkdir('solved_grids')
+        if not os.path.exists("solved_grids"):
+            os.mkdir("solved_grids")
         i = 0
         while os.path.exists("solved_grids/probabilistic_%s" % i):
             i += 1
         output_file = open("solved_grids/probabilistic_%s" % i, "w")
         output_file.writelines(sol)
 
-    return ''.join(empty_grid), ''.join(sol)
+    return "".join(empty_grid), "".join(sol)
 
 
 def adjacent_islands(h_grid, island_index):
-    """Returns the indexes of the islands that are adjacent to the input island
-    """
+    """Returns the indexes of the islands that are adjacent to the input island"""
 
     adjacent_islands = []
     island_xcoord, island_ycoord = h_grid.island_coordinates[island_index]
@@ -104,7 +147,7 @@ def adjacent_islands(h_grid, island_index):
 
     bottom_neighbour_found = False
     right_neighbour_found = False
-    for neighbour_index in range(island_index+1, h_grid.n_islands):
+    for neighbour_index in range(island_index + 1, h_grid.n_islands):
         neighbour_xcoord, neighbour_ycoord = h_grid.island_coordinates[neighbour_index]
         if not right_neighbour_found and island_xcoord == neighbour_xcoord:
             right_neighbour_found = True
@@ -120,28 +163,35 @@ def adjacent_islands(h_grid, island_index):
 
 
 def coordinates_between(h_grid, i, j):
-    '''
+    """
     Returns the list of coordinates a bridge between i and j would cross over
     Also returns 0 if the bridge is horizontal or 1 if it is vertical
-    '''
+    """
     # if the bridge is horizontal
     coordinates = []
     is_horizontal = False
     if h_grid.island_coordinates[i][0] == h_grid.island_coordinates[j][0]:
         x = h_grid.island_coordinates[i][0]
-        coordinates = [(x, y) for y in range(
-            h_grid.island_coordinates[i][1]+1, h_grid.island_coordinates[j][1])]
+        coordinates = [
+            (x, y)
+            for y in range(
+                h_grid.island_coordinates[i][1] + 1, h_grid.island_coordinates[j][1]
+            )
+        ]
         is_horizontal = True
     elif h_grid.island_coordinates[i][1] == h_grid.island_coordinates[j][1]:
         y = h_grid.island_coordinates[i][1]
-        coordinates = [(x, y) for x in range(
-            h_grid.island_coordinates[i][0]+1, h_grid.island_coordinates[j][0])]
+        coordinates = [
+            (x, y)
+            for x in range(
+                h_grid.island_coordinates[i][0] + 1, h_grid.island_coordinates[j][0]
+            )
+        ]
     return coordinates, is_horizontal
 
 
 def intersect(h_grid, ai, aj, bi, bj):
-    """Returns true if bridge a and bridge b intersect
-    """
+    """Returns true if bridge a and bridge b intersect"""
     coords_under_a, bridge_a_horizontal = coordinates_between(h_grid, ai, aj)
     coords_under_b, bridge_b_horizontal = coordinates_between(h_grid, bi, bj)
 
@@ -165,8 +215,7 @@ def find_subtour(h_grid, solver, y_vars):
     subtour_islands = {0}
 
     def scan(island):
-        '''Scans the bridge map recursively
-        '''
+        """Scans the bridge map recursively"""
         while bridges[island]:
             successor = bridges[island][0]
             subtour_islands.add(successor)
@@ -190,7 +239,7 @@ def add_subtour_elimination(model, subtour_islands, y_vars):
 
 
 class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter):
-    """ may be used to print intermediate solutions """
+    """may be used to print intermediate solutions"""
 
     def __init__(self, h_grid, x_variables, y_variables):
         self.x_variables = x_variables
@@ -207,8 +256,7 @@ class HashiSolutionPrinter(cp_model.ObjectiveSolutionPrinter):
 
 
 def branch_and_cut(h_grid, relaxed_model, y_vars, log=False):
-    """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)
-    """
+    """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)"""
 
     model = relaxed_model
     while True:
@@ -233,7 +281,7 @@ def branch_and_cut(h_grid, relaxed_model, y_vars, log=False):
             return solver, status
 
 
-def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=False):
+def solve_grid(json_grid, write_solutions=False, log=False, solution_is_unique=False):
 
     start_time = time.time()
 
@@ -248,7 +296,8 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
         return
 
     h_grid = parse_has.ProbabilisticHashiGrid(
-        width, height, n_islands, PRECISION_N_DIGITS)
+        width, height, n_islands, PRECISION_N_DIGITS
+    )
     h_grid.fill_grid(islands, model)
 
     # declaring the variables
@@ -256,10 +305,10 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
     y_vars = {}
 
     for i in range(h_grid.n_islands):
-        for j in range(i+1, h_grid.n_islands):
+        for j in range(i + 1, h_grid.n_islands):
             if j in adjacent_islands(h_grid, i):
-                x_vars[(i, j)] = model.NewIntVar(0, 2, 'x_'+str(i)+"_"+str(j))
-                y_vars[(i, j)] = model.NewBoolVar('y_'+str(i)+"_"+str(j))
+                x_vars[(i, j)] = model.NewIntVar(0, 2, "x_" + str(i) + "_" + str(j))
+                y_vars[(i, j)] = model.NewBoolVar("y_" + str(i) + "_" + str(j))
 
     # First constraint : The sum of bridges connected to an island must be equal to the number of digits
     for i in range(h_grid.n_islands):
@@ -273,22 +322,22 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
     # If there is no bridge between i and j, x must be =0
     for (x, y) in zip(x_vars.values(), y_vars.values()):
         model.Add(y <= x)
-        model.Add(x <= 2*y)
+        model.Add(x <= 2 * y)
 
     # If two bridges intersect, one of them can be built at most
     for i, a in enumerate(y_vars):
-        for b in list(y_vars.keys())[i+1:]:
+        for b in list(y_vars.keys())[i + 1 :]:
             if intersect(h_grid, a[0], a[1], b[0], b[1]):
                 model.Add(y_vars[a] + y_vars[b] <= 1)
 
     # Weak connectivity constraint
-    model.Add(sum(y_vars.values()) >= h_grid.n_islands-1)
+    model.Add(sum(y_vars.values()) >= h_grid.n_islands - 1)
 
     # Probabilities of the digits (the objective to maximize)
     digits_probs = {}
     probs_upper_bound = 0
     for i in range(n_islands):
-        digits_probs[i] = model.NewIntVar(0, 10**PRECISION_N_DIGITS, f'dp_{i}')
+        digits_probs[i] = model.NewIntVar(0, 10**PRECISION_N_DIGITS, f"dp_{i}")
         model.AddElement(h_grid.digits[i], h_grid.probs[i], digits_probs[i])
         probs_upper_bound += max(h_grid.probs[i])
 
@@ -302,7 +351,7 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
 
         solver, status = branch_and_cut(h_grid, model, y_vars, log=log)
         confidence = 1
-        for dp in digits_probs.values() :
+        for dp in digits_probs.values():
             confidence *= solver.Value(dp) / 10**PRECISION_N_DIGITS
 
         # If the solution isn't unique, we found a solution
@@ -313,7 +362,8 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
         # If no solution, disallow this digit assignment
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             model.AddForbiddenAssignments(
-                h_grid.digits, [solver.Value(d) for d in h_grid.digits])
+                h_grid.digits, [solver.Value(d) for d in h_grid.digits]
+            )
             continue
 
         else:
@@ -326,7 +376,8 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
             aux_model.CopyFrom(model)
 
             aux_model.AddAllowedAssignments(
-                h_grid.digits, [tuple([solver.Value(d) for d in h_grid.digits])])
+                h_grid.digits, [tuple([solver.Value(d) for d in h_grid.digits])]
+            )
             aux_model.ClearObjective()
 
             aux_solver = cp_model.CpSolver()
@@ -340,19 +391,22 @@ def solve_grid(json_grid, write_solutions=True, log=False, solution_is_unique=Fa
                     print("        Solution is not unique, retrying")
 
                 model.AddForbiddenAssignments(
-                    h_grid.digits, [tuple([solver.Value(d) for d in h_grid.digits])])
+                    h_grid.digits, [tuple([solver.Value(d) for d in h_grid.digits])]
+                )
 
             else:
                 if log:
                     print("        Solution is unique !")
                 solved = True
 
-    empty_grid, solved_grid = print_solution(
-        h_grid, solver, x_vars, write_solutions)
+    empty_grid, solved_grid = print_solution(h_grid, solver, x_vars, write_solutions)
 
-    return "Solution : \n" + solved_grid +\
-        f"Confidence : {confidence*100}%\n" +\
-        f'Successfully solved the grid in {round(time.time()-start_time,3)} seconds'
+    return (
+        "Solution : \n"
+        + solved_grid
+        + f"Confidence : {confidence*100}%\n"
+        + f"Successfully solved the grid in {round(time.time()-start_time,3)} seconds"
+    )
 
 
 def main():
@@ -363,13 +417,12 @@ def main():
     args = parser.parse_args()
     solution_is_unique = True if args.solution_is_unique else False
 
-    with open(args.grid, 'r') as f:
+    with open(args.grid, "r") as f:
         grid_json = json.load(f)
 
-    result = solve_grid(grid_json, log=True,
-                        solution_is_unique=solution_is_unique)
+    result = solve_grid(grid_json, log=True, solution_is_unique=solution_is_unique)
     print(result)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
