@@ -11,6 +11,7 @@
 from ortools.sat.python import cp_model
 import parse_has
 import sys
+import argparse
 
 
 def print_solution(h_grid, solver, x_vars):
@@ -150,6 +151,9 @@ def intersect(h_grid, ai, aj, bi, bj):
 
 
 def find_subtour(h_grid, solver, y_vars):
+    """Returns the list of subtours in a given solution to the grid
+    """
+
 
     # build a dict to determine where we can go from each island
     bridges = {island: [] for island in range(h_grid.n_islands)}
@@ -178,6 +182,8 @@ def find_subtour(h_grid, solver, y_vars):
 
 
 def add_subtour_elimination(model, subtour_islands, y_vars):
+    """Adds a subtour elimination constraint
+    """
     exiting_bridges = []
     for (from_island, to_island), y in y_vars.items():
         if (from_island in subtour_islands) != (to_island in subtour_islands):
@@ -185,13 +191,14 @@ def add_subtour_elimination(model, subtour_islands, y_vars):
     model.Add(sum(exiting_bridges) >= 1)
 
 
-def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
-    """Applies the Branch And Cut algorithm, starting from the relaxed model (without subtour elimination)
+def solve_grid(h_grid, relaxed_model, x_vars, y_vars):
+    """Finds a valid solution by solving the model and adding subtour elimination constraints when necessary
     """
 
     model = relaxed_model
     while True:
-        # try without remaking a solver
+        
+        # Solve once
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
 
@@ -199,6 +206,7 @@ def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
             print('No solution found.')
             return solver, status
 
+        # Find and eliminate subtours in the solution
         subtour = find_subtour(h_grid, solver, y_vars)
         if not subtour:
             print_solution(h_grid, solver, x_vars)
@@ -207,11 +215,61 @@ def branch_and_cut(h_grid, relaxed_model, x_vars, y_vars):
             return solver, status
 
         add_subtour_elimination(model, subtour, y_vars)
+        
+def find_all_solutions(h_grid, relaxed_model, x_vars, y_vars):
+    """Finds all solutions to the grid and outputs the number of solutions
+    """
+    class SolutionCallback(cp_model.CpSolverSolutionCallback):
+        def __init__(self, model, h_grid, y_vars, solutions_list):
+            self.model = model
+            self.h_grid = h_grid
+            self.y_vars = y_vars
+            self.solutions_list = solutions_list
+            super().__init__()
+
+        def OnSolutionCallback(self):
+            subtour = find_subtour(h_grid, self, y_vars)
+            if subtour:
+                self.solutions_list.append(False) 
+                add_subtour_elimination(model, subtour, y_vars)
+            else : 
+                self.solutions_list.append(True) 
+
+            
+
+    model = relaxed_model
+    solved = False
+    while not solved:
+        print('Solving')
+        
+        valid_solutions = []
+        solver = cp_model.CpSolver()
+        solver.parameters.enumerate_all_solutions = True
+        solution_callback = SolutionCallback(model, h_grid, y_vars, valid_solutions)
+        status = solver.Solve(model, solution_callback=solution_callback)
+
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            print('No solution found.')
+            return solver, status
+        
+        if all(valid_solutions) :
+            solved = True
+        else : 
+            print(' Eliminated some subtours, retrying')
+        
+    print(f'{len(valid_solutions)} valid solutions found. Last solution :')
+    print_solution(h_grid,solver,x_vars)
+    
+    return solver, status
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("has_file")
+    parser.add_argument("--a", default=False, action='store_true', help="Find all solutions")
+    args = parser.parse_args()
 
-    h_grid = parse_has.read_has_file(sys.argv[1])
+    h_grid = parse_has.read_has_file(args.has_file)
 
     model = cp_model.CpModel()
     if not model:
@@ -249,8 +307,10 @@ def main():
     # Weak connectivity constraint
     model.Add(sum(y_vars.values()) >= h_grid.n_islands-1)
 
-    solver, status = branch_and_cut(h_grid, model, x_vars, y_vars)
-
+    if args.a :
+        solver, status = find_all_solutions(h_grid, model, x_vars, y_vars)
+    else :
+        solver, status = solve_grid(h_grid, model, x_vars, y_vars)
 
 if __name__ == '__main__':
     main()
