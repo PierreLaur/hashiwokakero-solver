@@ -204,6 +204,8 @@ def intersect(h_grid, ai, aj, bi, bj):
 
 
 def find_subtour(h_grid, solver, y_vars):
+    """Returns a set of islands that form a subtour in a given solution,
+    or None if there is no subtour"""
 
     # build a dict to determine where we can go from each island
     bridges = {island: [] for island in range(h_grid.n_islands)}
@@ -227,7 +229,7 @@ def find_subtour(h_grid, solver, y_vars):
     if len(subtour_islands) != h_grid.n_islands:
         return subtour_islands
     else:
-        return []
+        return {}
 
 
 def add_subtour_elimination(model, subtour_islands, y_vars):

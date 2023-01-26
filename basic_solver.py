@@ -5,12 +5,14 @@ from ortools.sat.python import cp_model
 import parse_has
 import argparse
 import os
-import time
+from tqdm import tqdm
+
 
 def solution_to_string(h_grid, solver, x_vars):
-    """Returns a string representation of the grid solution 
-    """
-    
+    """Returns a string representation of the grid solution"""
+
+    # this could be more efficient - called a lot with --write option
+
     def replace_character(sol, i, j, char):
         """Inline helper to add an island or bridge in the solution"""
         sol[i] = sol[i][:j] + char + sol[i][j + 1 :]
@@ -113,6 +115,7 @@ def solution_to_string(h_grid, solver, x_vars):
 
     return "".join(sol)
 
+
 def adjacent_islands(h_grid, island_index):
     """Returns the indexes of the islands that are adjacent to the input island"""
 
@@ -192,7 +195,10 @@ def intersect(h_grid, ai, aj, bi, bj):
 
 
 def find_subtour(h_grid, solver, y_vars):
-    """Returns the list of subtours in a given solution to the grid"""
+    """Returns a set of islands that form a subtour in a given solution,
+    or None if there is no subtour"""
+
+    # This could be more efficient
 
     # build a dict to determine where we can go from each island
     bridges = {island: [] for island in range(h_grid.n_islands)}
@@ -216,7 +222,7 @@ def find_subtour(h_grid, solver, y_vars):
     if len(subtour_islands) != h_grid.n_islands:
         return subtour_islands
     else:
-        return []
+        return None
 
 
 def add_subtour_elimination(model, subtour_islands, y_vars):
@@ -227,19 +233,23 @@ def add_subtour_elimination(model, subtour_islands, y_vars):
             exiting_bridges.append(y)
     model.Add(sum(exiting_bridges) >= 1)
 
-def write_solution(grid_name : str, solution : str) :
-    """Writes the solution to a file
-    """
-    if not os.path.exists('solutions') :
-        os.mkdir('solutions')
-    file = os.path.join('solutions', grid_name)
-    with open(file, 'a+') as f :
-        f.write(solution+"\n\n")
+
+def write_solution(grid_name: str, solution: str):
+    """Writes the solution to a file"""
+    if not os.path.exists("solutions"):
+        os.mkdir("solutions")
+    file = os.path.join("solutions", grid_name)
+    with open(file, "a+") as f:
+        f.write(solution + "\n\n")
+
 
 def solve_grid(h_grid, relaxed_model, x_vars, y_vars, write=False):
     """Finds a valid solution by solving the model and adding subtour elimination constraints when necessary"""
 
     model = relaxed_model
+    subtours_eliminated_progressbar = tqdm(
+        bar_format="Subtours eliminated : {n}", leave=False
+    )
     while True:
 
         # Solve once
@@ -250,72 +260,105 @@ def solve_grid(h_grid, relaxed_model, x_vars, y_vars, write=False):
             print("No solution found.")
             return solver, status
 
-        # Find and eliminate subtours in the solution
+        # Find and eliminate a subtour in the solution
         subtour = find_subtour(h_grid, solver, y_vars)
-        if not subtour:
-            print(solution_to_string(h_grid, solver, x_vars), end='')
+        if subtour:
+            add_subtour_elimination(model, subtour, y_vars)
+            subtours_eliminated_progressbar.update()
+        else:
+            subtours_eliminated_progressbar.close()
+            print(solution_to_string(h_grid, solver, x_vars), end="")
             print(
                 f"Successfully solved the grid in {round(solver.UserTime(),3)} seconds"
             )
-            if write :
+            if write:
                 write_solution(h_grid.name, solution_to_string(h_grid, solver, x_vars))
                 print(f'Wrote solution to {os.path.join("solutions",h_grid.name)}')
             return solver, status
-
-        add_subtour_elimination(model, subtour, y_vars)
 
 
 def find_all_solutions(h_grid, relaxed_model, x_vars, y_vars, write=False):
     """Finds all solutions to the grid and outputs the number of solutions"""
 
     class SolutionCallback(cp_model.CpSolverSolutionCallback):
-        """Called each time a solution is found. Counts the number of solutions, check if they are all valid (no subtours)
+        """Called each time a solution is found. Counts the number of valid solutions found,
+        checks for subtours
         and writes the results to a file if necessary
         """
-        def __init__(self, model, h_grid, x_vars, y_vars, solutions_list, write=False):
+
+        def __init__(
+            self,
+            model: cp_model.CpModel,
+            h_grid,
+            x_vars,
+            y_vars,
+            n_solutions_progressbar: tqdm,
+            write: bool = False,
+        ):
             self.model = model
             self.h_grid = h_grid
             self.x_vars = x_vars
             self.y_vars = y_vars
-            self.solutions_list = solutions_list
+
+            self.solutions_all_valid = True
+            self.n_valid_solutions = 0
+            self.n_solutions_progressbar = n_solutions_progressbar
             self.write = write
             super().__init__()
 
         def OnSolutionCallback(self):
+            """Called everytime a solution is found during search"""
             subtour = find_subtour(h_grid, self, y_vars)
             if subtour:
-                self.solutions_list.append(False)
+                self.solutions_all_valid = False
                 add_subtour_elimination(self.model, subtour, y_vars)
+                self.StopSearch()
             else:
-                self.solutions_list.append(True)
-                if self.write :
-                    write_solution(self.h_grid.name, 
-                                   solution_to_string(self.h_grid, self, self.x_vars))
-                    
+                if self.n_valid_solutions == self.n_solutions_progressbar.n:
+                    self.n_solutions_progressbar.update()
+                self.n_valid_solutions += 1
+                if self.n_valid_solutions == 1024:
+                    self.n_solutions_progressbar.bar_format = "Minimum number of valid solutions : {n}          Press Ctrl+C to stop searching"
+                if self.write:
+                    write_solution(
+                        self.h_grid.name,
+                        solution_to_string(self.h_grid, self, self.x_vars),
+                    )
 
     model = relaxed_model
     solved = False
+    subtours_eliminated_progressbar = tqdm(
+        bar_format="Subtours eliminated : {n}", leave=False
+    )
+    n_valid_solutions_progressbar = tqdm(
+        bar_format="Minimum number of valid solutions : {n}", leave=False
+    )
     while not solved:
-        print("Solving")
+        # print("Solving")
 
-        valid_solutions = []
         solver = cp_model.CpSolver()
         solver.parameters.enumerate_all_solutions = True
-        solution_callback = SolutionCallback(model, h_grid, x_vars, y_vars, valid_solutions, write)
+        solution_callback = SolutionCallback(
+            model, h_grid, x_vars, y_vars, n_valid_solutions_progressbar, write
+        )
         status = solver.Solve(model, solution_callback=solution_callback)
 
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             print("No solution found.")
             return solver, status
 
-        if all(valid_solutions):
+        if solution_callback.solutions_all_valid:
             solved = True
         else:
-            print(" Eliminated some subtours, retrying")
+            subtours_eliminated_progressbar.update()
+    subtours_eliminated_progressbar.close()
+    n_valid_solutions_progressbar.close()
 
-    print(f"{len(valid_solutions)} valid solutions found. Last solution :")
-    print(solution_to_string(h_grid, solver, x_vars))
-    if write :
+    print(
+        f"\n{solution_callback.n_valid_solutions} valid solutions found. Last solution :"
+    )
+    print(solution_to_string(h_grid, solver, x_vars), end="")
+    if write:
         print(f'Wrote solutions to {os.path.join("solutions",h_grid.name)}')
 
     return solver, status
@@ -331,17 +374,16 @@ def main():
         "--write", default=False, action="store_true", help="Write solutions to a file"
     )
     args = parser.parse_args()
-    
 
     h_grid = parse_has.read_has_file(args.has_file)
-    if args.write :
-        file = os.path.join('solutions',h_grid.name)
-        if os.path.exists(file) :
-            ok = input(f'File {file} already exists ! Overwrite ? (y/n)')
-            if ok not in ["y", "Y"] :
-                print('Aborting')
+    if args.write:
+        file = os.path.join("solutions", h_grid.name)
+        if os.path.exists(file):
+            ok = input(f"File {file} already exists ! Overwrite ? (y/n)")
+            if ok not in ["y", "Y"]:
+                print("Aborting")
                 exit()
-            else :
+            else:
                 os.remove(file)
 
     model = cp_model.CpModel()
