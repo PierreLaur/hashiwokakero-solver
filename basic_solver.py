@@ -374,7 +374,7 @@ def main():
         "--write", default=False, action="store_true", help="Write solutions to a file"
     )
     args = parser.parse_args()
-
+    
     h_grid = parse_has.read_has_file(args.has_file)
     if args.write:
         file = os.path.join("solutions", h_grid.name)
@@ -385,6 +385,7 @@ def main():
                 exit()
             else:
                 os.remove(file)
+        print(f'Warning : writing all solutions to a file may take a lot of disk space in {os.path.join(os.getcwd(),"solutions")} for big instances')
 
     model = cp_model.CpModel()
     if not model:
